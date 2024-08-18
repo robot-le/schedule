@@ -5,7 +5,7 @@ import apiClient from '@/services/axios';
 export default {
   data() {
     return {
-        resp: null
+        resp: null,
     }
   },
   methods: {
@@ -22,5 +22,5 @@ export default {
 
 <template>
     <button @click="sendSchedule()">click me</button>
-    <p>{{ resp }}</p>
+    <p>resp={{ resp }}</p>
 </template>

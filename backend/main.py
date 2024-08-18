@@ -5,25 +5,57 @@ from datetime import datetime, timedelta
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, ConfigDict
 from pydantic.functional_validators import BeforeValidator
+from pydantic_settings import BaseSettings
+import os
+
+class Settings(BaseSettings):
+    mongodb_host: str = 'localhost'
+    mongodb_port: int = 27017
+    mongodb_database: str = 'myDatabase'
+    mongodb_username: str | None = None
+
+    @property
+    def mongodb_password(self) -> str | None:
+        try:
+            with open('/run/secrets/mongodb_password', 'r') as password_file:
+                return password_file.read().strip()
+        except FileNotFoundError:
+            return None
+
+    @property
+    def mongodb_uri(self) -> str:
+        if self.mongodb_password:
+            return f'mongodb://{self.mongodb_username}:{self.mongodb_password}@{self.mongodb_host}:{self.mongodb_port}/{self.mongodb_database}'
+        else:
+            return f'mongodb://{self.mongodb_host}:{self.mongodb_port}/{self.mongodb_database}'
+
+    class Config:
+        env_file = '.env'
+
+settings = Settings()
 
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=['http://localhost:5173'],
+    allow_origins=[
+        'http://localhost:5173',
+        'http://localhost',
+        'http://localhost:8080',
+    ],
     allow_credentials=True,
     allow_methods=['*'],
     allow_headers=['*'],
 )
 
-client = AsyncIOMotorClient("mongodb://localhost:27017")
+client = AsyncIOMotorClient(settings.mongodb_uri)
 db = client.myDatabase
 collection = db.myCollection
 
 PyObjectId = Annotated[str, BeforeValidator(str)]
 
 class Schedule(BaseModel):
-    id: PyObjectId | None = Field(alias="_id", default=None)
+    id: PyObjectId | None = Field(alias='_id', default=None)
     person: str
     subject: str
     date_start: datetime = Field(default=datetime.today())
@@ -36,8 +68,8 @@ class ScheduleCollection(BaseModel):
 @app.post('/schedules')
 async def create_schedule(item: Schedule):
     result = await collection.insert_one(item.model_dump())
-    return {"id": str(result.inserted_id)}
+    return {'id': str(result.inserted_id)}
 
-@app.get("/schedules")
+@app.get('/schedules')
 async def read_schedules():
     return ScheduleCollection(schedules=await collection.find().to_list(100))

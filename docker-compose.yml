@@ -1,0 +1,39 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    container_name: fastapi_backend
+    restart: always
+    ports:
+      - "8000:8000"
+    depends_on:
+      - database
+    environment:
+      FRONTEND_URl: http://localhost:8080
+      MONGODB_HOST: ${MONGODB_HOST:-database}
+      MONGODB_PORT: ${MONGODB_PORT:-27017}
+      MONGODB_DATABASE: ${MONGODB_NAME:-myDatabase}
+      MONGODB_USERNAME: ${MONGODB_USERNAME:-mongo_root}
+      MONGODB_PASSWORD: ${MONGODB_PASSWORD:-mongo_pass}
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: vuejs_frontend
+    restart: always
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+  database:
+    image: mongo:7.0.12
+    container_name: mongodb
+    restart: always
+    volumes:
+      - ./data/db:/data/db
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGODB_USERNAME:-mongo_root}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_PASSWORD:-mongo_pass}
