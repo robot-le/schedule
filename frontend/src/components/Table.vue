@@ -66,8 +66,6 @@
           @mousemove="drag(person, index)"
           @mouseup="endDrag"
         >
-        </div>
-
           <div
             v-if="hasSchedule(person, index)"
             class="schedule-block"
@@ -75,6 +73,8 @@
           >
             {{ getScheduleSubject(person, index) }}
           </div>
+        </div>
+
 
       </div>
     </div>
