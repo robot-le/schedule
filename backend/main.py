@@ -6,31 +6,15 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, ConfigDict
 from pydantic.functional_validators import BeforeValidator
 from pydantic_settings import BaseSettings
-import os
 
 class Settings(BaseSettings):
     mongodb_host: str = 'localhost'
     mongodb_port: int = 27017
     mongodb_database: str = 'myDatabase'
-    mongodb_username: str | None = None
-
-    @property
-    def mongodb_password(self) -> str | None:
-        try:
-            with open('/run/secrets/mongodb_password', 'r') as password_file:
-                return password_file.read().strip()
-        except FileNotFoundError:
-            return None
 
     @property
     def mongodb_uri(self) -> str:
-        if self.mongodb_password:
-            return f'mongodb://{self.mongodb_username}:{self.mongodb_password}@{self.mongodb_host}:{self.mongodb_port}/{self.mongodb_database}'
-        else:
-            return f'mongodb://{self.mongodb_host}:{self.mongodb_port}/{self.mongodb_database}'
-
-    class Config:
-        env_file = '.env'
+        return f'mongodb://{self.mongodb_host}:{self.mongodb_port}/{self.mongodb_database}'
 
 settings = Settings()
 

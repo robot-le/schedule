@@ -9,12 +9,9 @@ services:
     depends_on:
       - database
     environment:
-      FRONTEND_URl: http://localhost:8080
       MONGODB_HOST: ${MONGODB_HOST:-database}
       MONGODB_PORT: ${MONGODB_PORT:-27017}
       MONGODB_DATABASE: ${MONGODB_NAME:-myDatabase}
-      MONGODB_USERNAME: ${MONGODB_USERNAME:-mongo_root}
-      MONGODB_PASSWORD: ${MONGODB_PASSWORD:-mongo_pass}
 
   frontend:
     build:
@@ -30,10 +27,9 @@ services:
     image: mongo:7.0.12
     container_name: mongodb
     restart: always
+    user: mongodb
     volumes:
       - ./data/db:/data/db
     ports:
       - "27017:27017"
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGODB_USERNAME:-mongo_root}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_PASSWORD:-mongo_pass}
+    command: mongod --noauth
