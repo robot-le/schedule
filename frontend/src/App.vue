@@ -1,10 +1,14 @@
-<script setup>
-import Table from './components/Table.vue';
-</script>
-
 <template>
   <Table />
 </template>
 
-<style scoped>
-</style>
+<script>
+import Table from './components/Table.vue';
+
+export default {
+  name: 'App',
+  components: {
+    Table
+  }
+}
+</script>

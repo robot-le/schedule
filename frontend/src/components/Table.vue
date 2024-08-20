@@ -1,285 +1,281 @@
-<template>
-  <!-- <div class="schedule-table">
-    <table class="table table-bordered">
-      <thead>
-        <tr>
-          <th>Person</th>
-          <th v-for="day in weekDays" :key="day">{{ day }}</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="person in people" :key="person">
-          <td>{{ person }}</td>
-          <td
-            v-for="(day, index) in weekDays"
-            :key="day"
-            :class="{ 'bg-light': isWeekend(index) }"
-            @mousedown="startDrag(person, index)"
-            @mousemove="drag(person, index)"
-            @mouseup="endDrag"
-          >
-            <div
-              v-if="hasSchedule(person, index)"
-              class="schedule-block"
-              :style="getBlockStyle(person, index)"
-            >
-              {{ getScheduleSubject(person, index) }}
-            </div>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-    <ScheduleModal
-      v-if="showModal"
-      :person="modalData.person"
-      :startDate="modalData.startDate"
-      :endDate="modalData.endDate"
-      @save="saveSchedule"
-      @close="closeModal"
-    />
-  </div> -->
-
-  <div class="schedule-table">
-    <div class="schedule-grid">
-      <div class="schedule-header">
-        <div class="header-cell person-header">Person</div>
-        <div
-          v-for="day in weekDays"
-          :key="day"
-          class="header-cell day-header"
-        >
-          {{ day }}
-        </div>
-      </div>
-      <div
-        v-for="person in people"
-        :key="person"
-        class="schedule-row"
-      >
-        <div class="person-cell">{{ person }}</div>
-        <div
-          v-for="(day, index) in weekDays"
-          :key="day"
-          class="day-cell"
-          :class="{ 'weekend': isWeekend(index) }"
-          @mousedown="startDrag(person, index)"
-          @mousemove="drag(person, index)"
-          @mouseup="endDrag"
-        >
-          <div
-            v-if="hasSchedule(person, index)"
-            class="schedule-block"
-            :style="getBlockStyle(person, index)"
-          >
-            {{ getScheduleSubject(person, index) }}
-          </div>
-        </div>
-
-
-      </div>
-    </div>
-    <ScheduleModal
-      v-if="showModal"
-      :person="modalData.person"
-      :startDate="modalData.startDate"
-      :endDate="modalData.endDate"
-      @save="saveSchedule"
-      @close="closeModal"
-    />
-  </div>
-
-</template>
-
 <script setup>
-import { ref, onMounted, computed } from 'vue';
-import ScheduleModal from './ScheduleModal.vue';
+import { ref, onMounted, reactive, h, onBeforeMount } from 'vue'
 import apiClient from '@/services/axios';
 
-const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const people = ref([]);
-const schedules = ref([]);
-const isDragging = ref(false);
-const dragStart = ref({ person: null, day: null });
-const showModal = ref(false);
-const modalData = ref({ person: '', startDate: null, endDate: null });
+const people = reactive(getPeople())
+const rows = people.length + 1
+const cols = 7
+const cellHeight = 40
+const cellWidth = 60
 
-const isWeekend = (index) => index >= 5;
+const weekDays = [
+	'mon',
+	'tue',
+	'wed',
+	'thu',
+	'fri',
+	'sat',
+	'sun',
+]
 
-const hasSchedule = (person, day) => {
-  return schedules.value.some(
-    (s) => s.person === person && s.start_day <= day && s.end_day >= day
-  );
-};
+const gridContanerStyle = reactive({
+  gridTemplateRows: `repeat(${rows}, ${cellHeight}px)`,
+  gridTemplateColumns: `repeat(${cols}, ${cellWidth}px)`,
+  margin: 0,
+})
 
-const getScheduleSubject = (person, day) => {
-  const schedule = schedules.value.find(
-    (s) => s.person === person && s.start_day <= day && s.end_day >= day
-  );
-  return schedule ? schedule.subject : '';
-};
+function getPeople() {
+	return [
+        'Leonardo',
+        'Donatello',
+        'Michelangelo',
+        'Raphael',
+    ]
+}
 
-const getBlockStyle = (person, day) => {
-  const schedule = schedules.value.find(
-    (s) => s.person === person && s.start_day <= day && s.end_day >= day
-  );
-  // console.log(person)
-  if (!schedule) return {};
-  // const width = `${(schedule.end_day - schedule.start_day + 1) * 100}%`;
-  return {
-    width: `${(schedule.end_day - schedule.start_day + 1) * 100}%`,
-    left: `${(schedule.start_day - day) * 100}%`,
-    // left: '27%',
-    // width: '73%',
-    backgroundColor: getRandomColor(schedule.subject),
-  };
-};
+const grid = ref(null);
+let blocks = ref([]);
+let isCreating = ref(false);
+let isDragging = ref(false);
+let isResizing = ref(false);
+let startCell, currentBlock, resizeHandle, startX, blockStartLeft;
 
-const getRandomColor = (subject) => {
-  // Generate a consistent color based on the subject
-  let hash = 0;
-  for (let i = 0; i < subject.length; i++) {
-    hash = subject.charCodeAt(i) + ((hash << 5) - hash);
+
+function startCreatingBlock(e) {
+    if (e.target.classList.contains('grid-cell')) {
+        const existingBlock = blocks.value.find(
+          block => block.props['data-row'] == e.target.dataset.row
+        )
+
+        if (!existingBlock) {
+            isCreating.value = true;
+
+            blocks.value.push(h('div', {
+              'data-row': e.target.dataset.row,
+              'class': 'block',
+              'onMouseup': finishAction,
+              'onMousedown': startBlockAction,
+              'style': {
+                top: `${e.target.offsetTop}px`,
+                left: `${e.target.offsetLeft}px`,
+                width: `${cellWidth}px`,
+                height: `${cellHeight}px`,
+              },
+            },
+            [
+              h('div', {'class': 'resize-handle resize-handle-left'}),
+              h('div', {'class': 'resize-handle resize-handle-right'}),
+              h('div', {'class': 'drag-handle'}),
+            ]
+          ))
+
+            startCell = e.target;
+        }
+    }
+}
+
+function startBlockAction(e) {
+  e.stopPropagation();
+  currentBlock = e.currentTarget;
+  startX = e.clientX;
+  blockStartLeft = parseInt(currentBlock.style.left);
+
+  if (e.target.classList.contains('resize-handle')) {
+      isResizing.value = true;
+      resizeHandle = e.target;
+  } else if (e.target.classList.contains('drag-handle')) {
+      isDragging.value = true;
   }
-  const hue = hash % 360;
-  return `hsl(${hue}, 70%, 80%)`;
-};
+}
 
-const startDrag = (person, day) => {
-  // console.log('starting drag')
-  if (isWeekend(day)) return;
-  isDragging.value = true;
-  dragStart.value = { person, day };
-};
 
-const drag = (person, day) => {
-  // console.log('drag')
-  if (!isDragging.value || isWeekend(day)) return;
-};
-
-const endDrag = () => {
-  // console.log('ending drag')
-  if (!isDragging.value) return;
-  isDragging.value = false;
-  const endDay = Math.min(dragStart.value.day, 4); // Ensure it doesn't go into the weekend
-  showModal.value = true;
-  modalData.value = {
-    person: dragStart.value.person,
-    startDate: weekDays[dragStart.value.day],
-    endDate: weekDays[endDay],
-  };
-};
-
-const saveSchedule = async (scheduleData) => {
-  try {
-    await apiClient.post('/api/schedules', scheduleData);
-    await fetchSchedules();
-    closeModal();
-  } catch (error) {
-    console.error('Error saving schedule:', error);
+function getSizeByGrid(curCoord, rectLeft) {
+  curCoord = curCoord - rectLeft
+  let fullCellWidth = cellWidth + .55
+  let remainder = curCoord % fullCellWidth
+  if (remainder >= (fullCellWidth / 2)) {
+      return (curCoord - remainder + fullCellWidth) + rectLeft
+  } else {
+      return (curCoord - remainder) + rectLeft
   }
-};
+}
 
-const closeModal = () => {
-  showModal.value = false;
-  modalData.value = { person: '', startDate: null, endDate: null };
-};
+function handleMouseMove(e) {
+    if (!isCreating.value && !isDragging.value && !isResizing.value) return;
 
-const fetchSchedules = async () => {
-  try {
-    const response = await apiClient.get('/api/schedules');
-    schedules.value = response.data['schedules'];
-  } catch (error) {
-    console.error('Error fetching schedules:', error);
+    if (e.target.classList.contains('block')) {
+      currentBlock = e.target
+    } else if (e.target.classList.contains('drag-handle')) {
+      currentBlock = e.currentTarget.parentElement
+    }
+
+
+    const gridRect = grid.value.getBoundingClientRect();
+    const blockRect = currentBlock.getBoundingClientRect();
+
+
+    if (isResizing.value) {
+      const isLeftHandle = resizeHandle.classList.contains('resize-handle-left');
+      let newLeft, newWidth;
+
+      if (isLeftHandle) {
+          newLeft = Math.max(gridRect.left, Math.min(e.clientX, blockRect.right - cellWidth));
+          newWidth = blockRect.right - newLeft;
+      } else {
+          newLeft = blockRect.left;
+          newWidth = Math.max(cellWidth, Math.min(e.clientX - newLeft, gridRect.right - newLeft));
+      }
+
+      currentBlock.style.left = `${getSizeByGrid(newLeft, gridRect.left)}px`;
+      currentBlock.style.width = `${getSizeByGrid(newWidth, gridRect.left)}px`;
+    } else if (isDragging.value) {
+      const deltaX = e.clientX - startX;
+      const newLeft = Math.max(gridRect.left, Math.min(blockStartLeft + deltaX, gridRect.right - blockRect.width));
+      currentBlock.style.left = `${getSizeByGrid(newLeft, gridRect.left)}px`;
+    } else if (isCreating.value) {
+      const targetCell = document.elementFromPoint(e.clientX, e.clientY);
+      if (!targetCell || !targetCell.classList.contains('grid-cell')) return;
+
+      const startIndex = parseInt(startCell.dataset.ind);
+      const targetIndex = parseInt(targetCell.dataset.ind);
+      const rowStart = Math.floor(startIndex / 10) * 10;
+      const rowEnd = rowStart + 9;
+
+      if (targetIndex < rowStart || targetIndex > rowEnd) return;
+
+      const left = Math.min(startCell.offsetLeft, targetCell.offsetLeft);
+      const width = Math.abs(targetCell.offsetLeft - startCell.offsetLeft) + cellWidth;
+
+      currentBlock.style.left = left + 'px';
+      currentBlock.style.width = width + 'px';
+    }
   }
-};
 
-const fetchPeople = async () => {
-  try {
-    const response = await apiClient.get('/api/people');
-    people.value = response.data;
-  } catch (error) {
-    console.error('Error fetching people:', error);
+
+  function finishAction(e) {
+      isCreating.value = false;
+      isDragging.value = false;
+      isResizing.value = false;
   }
-};
 
-onMounted(async () => {
-  await fetchPeople();
-  await fetchSchedules();
-});
 </script>
 
-<style scoped>
+<template>
+    <div class="container">
+      <h1 class="text-center mt-4">Interactive Scheduler</h1>
+      <div class="container calendar border">
+        <div class="people-container border">
+          <div>&nbsp;</div>
+          <div v-for="person in people" class="">{{ person }}</div>
+        </div>
+          <div
+          ref="grid"
+          class="grid-container"
+          :style="gridContanerStyle"
+          @mousedown="startCreatingBlock"
+          @mousemove="handleMouseMove"
+          @mouseup="finishAction"
+          >
+            <template v-for="row in rows">
+              <template v-for="col in cols">
+                <div v-if="row == 1"
+                class="weekdays"
+                >{{ weekDays[col - 1] }}</div>
 
-.schedule-table {
-  /* position: relative; */
-  position: absolute;
-  width: 100%;
-  overflow-x: auto;
+                <div v-else
+                :data-row="row - 2"
+                :data-col="col - 1"
+                :data-ind="`${row - 2}${col - 1}`"
+                class="grid-cell"></div>
+              </template>
+            </template>
+
+            <template v-for="block of blocks">
+              <component :is="block"/>
+            </template>
+
+
+          </div>
+        </div>
+    </div>
+</template>
+
+<style>
+.calendar {
+  display: flex;
+  justify-content: center;
+  padding-block: 15px;
+  width: 600px;
+  border-radius: 20px;
+  box-shadow: #000000 10px 10px 25px;
 }
-
-.schedule-grid {
+.people-container {
+  padding-inline: 20px;
   display: flex;
   flex-direction: column;
-  border: 1px solid #dee2e6;
-}
+  justify-content: space-around;
 
-.schedule-header, .schedule-row {
+}
+.grid-container {
+	display: grid;
+	gap: 1px;
+	background-color: #ddd;
+	padding: 1px;
+	width: fit-content;
+	margin: 20px auto;
+}
+.grid-cell {
+	background-color: #fff;
+	border: 1px solid #ccc;
+}
+.grid-cell:hover {
+	background-color: #e6e6e6;
+}
+.weekdays {
   display: flex;
-  width: 100%;
-}
-
-.header-cell, .person-cell, .day-cell {
-  flex: 1;
-  padding: 0.75rem;
-  border: 1px solid #dee2e6;
-  text-align: center;
-  min-width: 100px;
-}
-
-.person-header, .person-cell {
-  flex: 0 0 150px;
-  font-weight: bold;
-}
-
-.day-cell {
-  position: relative;
-  height: 50px;
-}
-
-.weekend {
-  background-color: #f8f9fa;
-}
-
-.schedule-block {
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 100%;
-  display: flex;
-  align-items: center;
+	background-color: #ccc;
   justify-content: center;
-  border: 1px solid #007bff;
-  border-radius: 4px;
-  overflow: hidden;
-  cursor: move;
-  z-index: 1;
-}
-
-/* .schedule-table {
-  position: relative;
-}
-
-.schedule-block {
-  position: absolute;
-  top: 0;
-  height: 100%;
-  height: 50%;
-  display: flex;
   align-items: center;
-  justify-content: center;
-  border: 1px solid #007bff;
-  border-radius: 7px;
-  overflow: hidden;
-  cursor: move;
-} */
+}
+.block {
+	position: absolute;
+	background-color: #007bff;
+	opacity: 0.7;
+	display: flex;
+	align-items: top;
+	justify-content: center;
+	color: white;
+	font-weight: bold;
+	user-select: none;
+}
+.resize-handle {
+	position: absolute;
+	width: 10px;
+	height: 100%;
+	top: 0;
+	background-color: rgba(255, 255, 255, 0.5);
+	cursor: ew-resize;
+}
+.resize-handle-left {
+	left: 0;
+}
+.resize-handle-right {
+	right: 0;
+}
+.drag-handle {
+	position: absolute;
+	width: 40px;
+	height: 15px;
+	top: 80%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	border-radius: 50% 50% 0% 0%;
+	cursor: move;
+	
+	background-image: radial-gradient(rgb(117, 117, 117) 29.6%, transparent 29.6%);
+	background-position: 3px 3px;
+	background-size: 6px 6px;
+	background-color: rgba(255, 255, 255, 0.5);
+}
+
 </style>
